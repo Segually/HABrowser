@@ -40,7 +40,12 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 		if (this == Instance)
 		{
 			DontDestroyOnLoad(gameObject);
+#if UNITY_WEBGL && !UNITY_EDITOR
+			// Apple/Google native stores are not available in a browser player.
+			initialize_state = intialize_state_t.failed;
+#else
 			StartCoroutine(InitializeUnityGamingServicesThenIAP());
+#endif
 		}
 	}
 
@@ -59,6 +64,10 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 
 	public void InitializePurchasing()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		initialize_state = intialize_state_t.failed;
+		return;
+#else
 		if (IsInitialized()) return;
 		ConfigurationBuilder builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
 		foreach (string name in ShopControl.Instance.purchase_structs_ordering)
@@ -76,6 +85,7 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 			else if (type == "permanent") builder.AddProduct(key, ProductType.NonConsumable);
 		}
 		UnityPurchasing.Initialize(this, builder);
+#endif
 	}
 
 	private bool IsInitialized()

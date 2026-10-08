@@ -115,7 +115,7 @@ public class Connection
 
 	private void CloseSocket()
 	{
-		socket.Close();
+		socket?.Close();
 		status = connection_status.not_connected;
 		socket = null;
 		received_data_lock.EnterWriteLock();
@@ -175,6 +175,14 @@ public class Connection
 
 	private IEnumerator ConnectCoroutine()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		// Browsers need a WebSocket transport/relay to talk to the TCP servers.
+		// Use the existing failure flow instead of invoking unsupported sockets.
+		status = connection_status.not_connected;
+		async_flag = flag.connect_failed;
+		Debug.LogWarning("Multiplayer TCP connections are unavailable in this WebGL build.");
+		yield break;
+#else
 		yield return new WaitForSeconds(0.25f);
 		socket = new Socket(ip_type == "ipv6" ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 		socket.BeginConnect(ip, port, ConnectCallback, null);
@@ -196,6 +204,7 @@ public class Connection
 			CloseSocket();
 			async_flag = flag.connect_failed;
 		}
+#endif
 	}
 
 	private void ConnectCallback(IAsyncResult iar)

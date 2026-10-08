@@ -45,7 +45,7 @@ public class GamepadInput : MonoBehaviour, OrderedStart
 		up_vec = new Vector3(0f - (float)Math.Sqrt(0.5), 0f, (float)Math.Sqrt(0.5));
 		right_vec = new Vector3((float)Math.Sqrt(0.5), 0f, (float)Math.Sqrt(0.5));
 		SceneManager.activeSceneChanged += ChangedActiveScene;
-		if (Application.isEditor)
+		if (Application.isEditor || Application.platform == RuntimePlatform.WebGLPlayer)
 		{
 			ignore_gamepad = false;
 			ignore_keyboard = false;

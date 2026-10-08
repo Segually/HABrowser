@@ -1,5 +1,7 @@
 using System.Collections;
+#if UNITY_ANDROID
 using Google.Play.Review;
+#endif
 using UnityEngine;
 
 public class RateAppControl : MonoBehaviour, OrderedStart
@@ -13,7 +15,9 @@ public class RateAppControl : MonoBehaviour, OrderedStart
 
 	public static RateAppControl Instance;
 
+#if UNITY_ANDROID
 	private ReviewManager _reviewManager;
+#endif
 
 	private int n_ads_without_rate;
 

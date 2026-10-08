@@ -99,14 +99,20 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 		{
 			if (!Application.isEditor)
 			{
+#if UNITY_WEBGL && !UNITY_EDITOR
+				TextAsset textAsset = WebGLSynchronousAssets.Get<TextAsset>("Assets/SYNCHRONOUS/TextFiles/" + file_name.Replace('\\', '/') + ".txt");
+#else
 				AsyncOperationHandle<TextAsset> handle = Addressables.LoadAssetAsync<TextAsset>("Assets/SYNCHRONOUS/TextFiles/" + file_name.Replace('\\', '/') + ".txt");
 				// Path separators are normalized to make Addressables keys work across all platforms.
 				// Original: AsyncOperationHandle<TextAsset> handle = Addressables.LoadAssetAsync<TextAsset>("Assets/SYNCHRONOUS/TextFiles/" + file_name + ".txt");
 				TextAsset textAsset = handle.WaitForCompletion();
+#endif
 				if (textAsset != null)
 				{
 					List<string> result = new List<string>(Regex.Split(textAsset.text, "\n|\r|\r\n"));
+#if !UNITY_WEBGL || UNITY_EDITOR
 					Addressables.Release(handle);
+#endif
 					file_exists = true;
 					return result;
 				}
@@ -130,12 +136,18 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 	{
 		if (ValidSynchronousPath(file_name))
 		{
+#if UNITY_WEBGL && !UNITY_EDITOR
+			TextAsset textAsset = WebGLSynchronousAssets.Get<TextAsset>("Assets/SYNCHRONOUS/BytesFiles/" + file_name.Replace('\\', '/') + ".bytes");
+#else
 			AsyncOperationHandle<TextAsset> handle = Addressables.LoadAssetAsync<TextAsset>("Assets/SYNCHRONOUS/BytesFiles/" + file_name + ".bytes");
 			TextAsset textAsset = handle.WaitForCompletion();
+#endif
 			if (textAsset != null)
 			{
 				byte[] bytes = textAsset.bytes;
+#if !UNITY_WEBGL || UNITY_EDITOR
 				Addressables.Release(handle);
+#endif
 				file_exists = true;
 				return bytes;
 			}
@@ -150,11 +162,17 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 		{
 			return null;
 		}
+#if UNITY_WEBGL && !UNITY_EDITOR
+		Texture2D texture2D = WebGLSynchronousAssets.Get<Texture2D>("Assets/SYNCHRONOUS/Images/" + file_name.Replace('\\', '/') + ".png");
+#else
 		AsyncOperationHandle<Texture2D> handle = Addressables.LoadAssetAsync<Texture2D>("Assets/SYNCHRONOUS/Images/" + file_name + ".png");
 		Texture2D texture2D = handle.WaitForCompletion();
+#endif
 		if (texture2D != null)
 		{
+#if !UNITY_WEBGL || UNITY_EDITOR
 			Addressables.Release(handle);
+#endif
 			return texture2D;
 		}
 		return null;
@@ -166,11 +184,17 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 		{
 			return null;
 		}
+#if UNITY_WEBGL && !UNITY_EDITOR
+		GameObject gameObject = WebGLSynchronousAssets.Get<GameObject>("Assets/SYNCHRONOUS/Windows/" + file_name.Replace('\\', '/') + ".prefab");
+#else
 		AsyncOperationHandle<GameObject> handle = Addressables.LoadAssetAsync<GameObject>("Assets/SYNCHRONOUS/Windows/" + file_name + ".prefab");
 		GameObject gameObject = handle.WaitForCompletion();
+#endif
 		if (gameObject != null)
 		{
+#if !UNITY_WEBGL || UNITY_EDITOR
 			Addressables.Release(handle);
+#endif
 			return gameObject;
 		}
 		return null;
