@@ -1,3 +1,5 @@
+import { isIPv4 } from 'node:net';
+
 export const TRUSTED_IP = '45.8.201.48';
 export const FRIEND_PORT = 7002;
 export const MAX_FRAME = 8192;
@@ -77,22 +79,60 @@ function dispatchers(reader) {
   return entries;
 }
 
+// Numeric public IPv4 only: no DNS resolution or local-network destinations.
+function validGameIP(ip) {
+  if (!isIPv4(ip)) return false;
+  const [a, b] = ip.split('.').map(Number);
+  return a !== 0 && a !== 10 && a !== 127 && a < 224 &&
+    !(a === 169 && b === 254) && !(a === 172 && b >= 16 && b <= 31) &&
+    !(a === 192 && b === 168) && !(a === 100 && b >= 64 && b <= 127) &&
+    !(a === 198 && (b === 18 || b === 19));
+}
+
 export class DestinationPolicy {
-  constructor(now = Date.now, diagnostic = () => {}) { this.now = now; this.diagnostic = diagnostic; this.grants = new Map(); }
+  constructor(now = Date.now, diagnostic = () => {}) {
+    this.now = now; this.diagnostic = diagnostic; this.grants = new Map();
+    this.publicServers = new Set(); this.publicJoin = null;
+  }
+  observeClient(packet) {
+    if (packet[0] !== 30) return;
+    const reader = new PacketReader(packet);
+    reader.byte(); const name = reader.string(); reader.end();
+    if (!this.publicServers.has(name)) throw new Error('Public server not in upstream server list');
+    this.publicJoin = { name, expires: this.now() + 30000 };
+    for (const key of this.grants.keys()) if (key.startsWith('game:')) this.grants.delete(key);
+  }
   observe(packet) {
     const reader = new PacketReader(packet);
     const command = reader.byte();
     let entries = [], role;
-    if (command === 37) {
-      reader.string(); // server name
+    if (command === 29) {
+      const names = new Set(), count = reader.byte();
+      for (let i = 0; i < count; i++) {
+        names.add(reader.string());
+        for (let field = 0; field < 4; field++) reader.string();
+        reader.short(); reader.short(); reader.string();
+      }
+      reader.end(); this.publicServers = names; return;
+    } else if (command === 30) {
+      const result = reader.byte();
+      if (result === 0 || result === 1) this.publicJoin = null;
+      return;
+    } else if (command === 37) {
+      const name = reader.string();
       reader.string(); // join code remains on the original wire protocol
       const ip = reader.string(), type = reader.string(), port = reader.short();
       reader.byte(); reader.end();
       // A newer join response supersedes every previous game destination.
       for (const key of this.grants.keys()) if (key.startsWith('game:')) this.grants.delete(key);
+      if (this.publicJoin) {
+        const requested = this.publicJoin; this.publicJoin = null;
+        if (requested.name !== name || requested.expires <= this.now() || !this.publicServers.has(name))
+          throw new Error('Join response does not match listed public server request');
+      }
       this.diagnostic({ event: 'join-advertised', ip, port, addressType: type });
       // Match Connection.cs: only the literal "ipv6" selects IPv6; other hints
-      // use IPv4. The exact numeric IP/port checks below remain authoritative.
+      // use IPv4. The exact announced IP/port checks remain authoritative.
       if (type === 'ipv6') return;
       entries = [{ ip, port }]; role = 'game';
     } else if (command === 32) {
@@ -116,16 +156,19 @@ export class DestinationPolicy {
       for (let i = 0; i < count; i++) for (let field = 0; field < 6; field++) reader.string();
       reader.end();
     } else return;
-    // Only this fixed IP can ever become eligible, even if upstream advertises another.
+    // Game endpoints come exclusively from trusted command 37. Dispatcher pings
+    // remain pinned to the friend host and require their own discovery grants.
     for (const entry of entries) {
-      this.diagnostic({ event: 'destination-advertised', role, ip: entry.ip, port: entry.port, allowed: entry.ip === TRUSTED_IP });
-      if (entry.ip !== TRUSTED_IP || !Number.isInteger(entry.port) || entry.port < 1 || entry.port > 32767) continue;
+      const allowed = (role === 'game' ? validGameIP(entry.ip) : entry.ip === TRUSTED_IP) &&
+        Number.isInteger(entry.port) && entry.port >= 1 && entry.port <= 32767;
+      this.diagnostic({ event: 'destination-advertised', role, ip: entry.ip, port: entry.port, allowed });
+      if (!allowed) continue;
       if (this.grants.size >= 64) this.grants.delete(this.grants.keys().next().value);
       this.grants.set(`${role}:${entry.ip}:${entry.port}`, this.now() + (role === 'game' ? 30000 : 60000));
     }
   }
   consume(role, ip, port) {
-    if (ip !== TRUSTED_IP || !Number.isInteger(port) || !['game', 'ping'].includes(role)) return false;
+    if (!Number.isInteger(port) || !['game', 'ping'].includes(role)) return false;
     const key = `${role}:${ip}:${port}`, expiry = this.grants.get(key);
     if (!expiry || expiry <= this.now()) { this.grants.delete(key); return false; }
     this.grants.delete(key);

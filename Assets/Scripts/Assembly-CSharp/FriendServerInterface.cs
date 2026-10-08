@@ -382,9 +382,8 @@ public class FriendServerInterface : MonoBehaviour, OrderedStart
 				windows.CreateScreen(PlayerData.Instance.GetGlobalShort("13_plus") == 0 ? "FRIENDS-13 plus" : "FRIENDS-register", WindowPrefabsControl.build_into_t.mini_window);
 				break;
 			case friend_window_screen.friend_list:
-				window.HideMiniwindowHeaders();
+				window.ShowMiniwindowHeaders();
 				windows.CreateScreen("FRIENDS-friends_list", WindowPrefabsControl.build_into_t.mini_window);
-				windows.GetTextMeshPro("FRIENDS-friends_list", "header").text = TranslationControl.Instance.TranslateGeneral("FRIEND LIST", "GUI");
 				windows.GetTextLegacy("FRIENDS-friends_list", "add").text = TranslationControl.Instance.TranslateGeneral("ADD FRIEND", "GUI");
 				windows.GetTextLegacy("FRIENDS-friends_list", "have no friends").text = TranslationControl.Instance.TranslateGeneral("Add your friends to play with them online!", "GUI");
 				window.miniwindow_header_L.text = "FRIENDS";

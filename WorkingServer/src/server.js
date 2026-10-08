@@ -74,7 +74,10 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
         for (const child of session.children) child.close(1008, 'Friend session ended');
       } else session?.children.delete(ws);
     });
-    const outbound = new FrameDecoder(packet => validateClientPacket(role, packet));
+    const outbound = new FrameDecoder(packet => {
+      validateClientPacket(role, packet);
+      if (role === 'friend') session.policy.observeClient(packet);
+    });
     let inbound;
     ws.on('message', (bytes, binary) => {
       try {
@@ -82,21 +85,21 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
           if (binary || bytes.length > 1024) throw new Error('Expected handshake');
           const hello = JSON.parse(bytes.toString());
           role = hello.role;
-          let port;
+          let port, host;
           if (role === 'friend') {
             if (hello.ip !== TRUSTED_IP || hello.port !== FRIEND_PORT) throw new Error('Friend destination denied');
             session = { token: randomBytes(32).toString('hex'), policy: new DestinationPolicy(Date.now, diagnostic), owner: ws, peer: req.socket.remoteAddress, children };
-            sessions.set(session.token, session); port = FRIEND_PORT;
+            sessions.set(session.token, session); port = FRIEND_PORT; host = TRUSTED_IP;
           } else {
             session = sessions.get(hello.session);
             if (!session || session.owner.readyState !== WebSocket.OPEN || session.peer !== req.socket.remoteAddress ||
                 session.children.size >= 16 || !session.policy.consume(role, hello.ip, hello.port)) throw new Error('Destination not authorized');
-            session.children.add(ws); port = hello.port;
+            session.children.add(ws); port = hello.port; host = hello.ip;
           }
           selected = true; clearTimeout(helloTimeout);
-          // Never dial a hostname or any client-supplied IP. Only the approved numeric port varies.
-          tcp = dial({ host: TRUSTED_IP, port, family: 4 });
-          diagnostic({ event: 'tcp-connect', role, ip: TRUSTED_IP, port });
+          // Non-friend destinations must exactly match a consumed upstream grant.
+          tcp = dial({ host, port, family: 4 });
+          diagnostic({ event: 'tcp-connect', role, ip: host, port });
           connectTimeout = setTimeout(() => fail('TCP connection timeout'), 8000);
           tcp.setNoDelay(true); tcp.setTimeout(role === 'ping' ? 8000 : 120000);
           inbound = new FrameDecoder(packet => { if (role === 'friend') session.policy.observe(packet); });

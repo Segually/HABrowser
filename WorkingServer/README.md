@@ -15,8 +15,10 @@ by default; another build directory can be passed after `--`.
 The friend upstream is fixed in source to `45.8.201.48:7002`. The relay reads the
 original framed/fragmented TCP protocol and UTF-16LE `Packet.cs` fields. Only
 trusted upstream command 37 can grant a game connection: the exact advertised
-IPv4 address and signed-short port must match, the address must also be
-`45.8.201.48`, and the single-use grant expires after 30 seconds. Login/dispatcher
+public IPv4 address and signed-short port must match, and the single-use grant
+expires after 30 seconds. Public join requests (30) must name a server from the
+latest trusted server list (29); its join response must match that requested name.
+The list or a client request alone never authorizes a TCP connection. Login/dispatcher
 responses (11/32) separately grant restricted ping connections for 60 seconds.
 Pings can only send command 33. Client packets never create destination grants.
 Each grant belongs to its live friend connection; another browser session cannot
@@ -30,6 +32,6 @@ WebSocket origins must match the request host. Frame/message/connection limits,
 timeouts, and bounded write buffers protect the relay from unbounded buffering.
 
 This server enforces connection destinations; the original game server continues
-to validate gameplay and account/join credentials. The IP is intentionally fixed,
-including when the friend server advertises a different host. Such destinations
-are rejected rather than rewritten.
+to validate gameplay and account/join credentials. Friend connections and dispatcher
+pings stay pinned to `45.8.201.48`. Game connections use their trusted advertised
+endpoint unchanged; hostnames and local/private-network addresses are rejected.
