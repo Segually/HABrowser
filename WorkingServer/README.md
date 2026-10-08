@@ -35,3 +35,23 @@ This server enforces connection destinations; the original game server continues
 to validate gameplay and account/join credentials. Friend connections and dispatcher
 pings stay pinned to `45.8.201.48`. Game connections use their trusted advertised
 endpoint unchanged; hostnames and local/private-network addresses are rejected.
+
+Optional activity logging is disabled by default. Set `VERBOSE_LOGGING=true` to
+write daily JSON Lines files in `WorkingServer/logs/` (or the `LOG_DIR` directory).
+Records include client IP, connection ID, authenticated account name when known,
+game server endpoint/name, successful game login time, disconnect time and duration.
+A disconnect is the relay's observed leave time, including timeouts or lost connections.
+Login secrets, session tokens and packet contents are never logged. Logs are ignored
+by Git. Set `TRUST_PROXY=true` only with a loopback reverse proxy: it accepts a valid
+`X-Real-IP` from loopback connections only. Nginx must overwrite that header.
+For deployments, keep `LOG_DIR` persistent across releases and writable by the service.
+
+The splash page includes local ZIP import/export for Unity's `/idbfs` IndexedDB
+filesystem. Choose all game data or just `General/general_` (login and purchases).
+Transfers happen entirely in the browser. Close game tabs first so a running game
+cannot overwrite an imported save or leave recent changes unsaved. Import checks
+the archive, asks for confirmation, and atomically replaces matching files while
+preserving other files. ZIPs use relative paths and restore under the current site's
+save folder, so backups can move between browsers or hosts. Backups contain login
+data; keep them private. The ZIP transfer limit is 128 MB. Source scripts are in
+`client/`, served through fixed `/site/` routes; no generated Unity files are edited.

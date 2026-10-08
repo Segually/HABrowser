@@ -6,13 +6,20 @@ import { stat, realpath, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
-import { TRUSTED_IP, FRIEND_PORT, FrameDecoder, DestinationPolicy, validateClientPacket } from './protocol.js';
+import { TRUSTED_IP, FRIEND_PORT, FrameDecoder, PacketReader, DestinationPolicy, validateClientPacket } from './protocol.js';
+import { clientIP, createActivityLogger } from './logging.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LIMIT = 1024 * 1024;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.data': 'application/octet-stream' };
+const siteFiles = {
+  '/site/saves.js': 'client/saves.js',
+  '/site/save-core.js': 'client/save-core.js',
+  '/site/fflate.js': 'node_modules/fflate/esm/browser.js',
+  '/site/md5.js': 'node_modules/blueimp-md5/js/md5.min.js'
+};
 
-export function createServer({ publicDir = path.join(projectRoot, 'public'), dial = options => net.createConnection(options), diagnostic = () => {} } = {}) {
+export function createServer({ publicDir = path.join(projectRoot, 'public'), dial = options => net.createConnection(options), diagnostic = () => {}, activity = () => {}, trustProxy = false } = {}) {
   const sessions = new Map(), peers = new Map();
   const root = path.resolve(publicDir);
   const server = http.createServer(async (req, res) => {
@@ -31,9 +38,9 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
         return;
       }
       const name = decodeURIComponent(url.pathname === '/play' ? '/index.html' : url.pathname);
-      const file = await realpath(path.resolve(root, '.' + name));
+      const file = await realpath(siteFiles[name] ? path.join(projectRoot, siteFiles[name]) : path.resolve(root, '.' + name));
       const relative = path.relative(root, file);
-      if (relative.startsWith('..') || path.isAbsolute(relative) || name.split('/').some(part => part.startsWith('.'))) throw new Error('Forbidden path');
+      if (!siteFiles[name] && (relative.startsWith('..') || path.isAbsolute(relative) || name.split('/').some(part => part.startsWith('.')))) throw new Error('Forbidden path');
       const info = await stat(file);
       if (!info.isFile()) throw new Error('Not a file');
       let contentFile = file;
@@ -64,6 +71,10 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
   });
   wss.on('connection', (ws, req) => {
     let tcp, session, role, ready = false, selected = false;
+    const connectionId = randomBytes(12).toString('hex'), ip = clientIP(req, trustProxy);
+    let pendingAccount, account, destination, joinedAt;
+    const log = (event, extra = {}) => activity({ event, connectionId, ip, role, account: account || session?.account || null, ...destination, ...extra });
+    log('browser-connected');
     const children = new Set();
     const helloTimeout = setTimeout(() => fail('Handshake timeout'), 5000);
     let connectTimeout;
@@ -74,6 +85,8 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
     }
     ws.on('error', () => tcp?.destroy());
     ws.on('close', () => {
+      if (joinedAt) log('server-left', { joinedAt, durationMs: Date.now() - Date.parse(joinedAt) });
+      log('browser-disconnected');
       clearTimeout(helloTimeout); clearTimeout(connectTimeout); tcp?.destroy();
       if (role === 'friend' && session) {
         sessions.delete(session.token);
@@ -83,6 +96,16 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
     const outbound = new FrameDecoder(packet => {
       validateClientPacket(role, packet);
       if (role === 'friend') session.policy.observeClient(packet);
+      if ((role === 'friend' && packet[0] === 11) || (role === 'game' && packet[0] === 38)) {
+        pendingAccount = undefined;
+        try {
+          const reader = new PacketReader(packet); reader.byte();
+          if (role === 'game') reader.string(); // Skip the secret join code.
+          const name = reader.string();
+          if (role === 'friend') reader.string(); // Skip the login code.
+          reader.end(); pendingAccount = name.slice(0, 256);
+        } catch { /* Logging must not change the upstream's packet validation. */ }
+      }
     });
     let inbound;
     ws.on('message', (bytes, binary) => {
@@ -94,7 +117,10 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
           let port, host;
           if (role === 'friend') {
             if (hello.ip !== TRUSTED_IP || hello.port !== FRIEND_PORT) throw new Error('Friend destination denied');
-            session = { token: randomBytes(32).toString('hex'), policy: new DestinationPolicy(Date.now, diagnostic), owner: ws, peer: req.socket.remoteAddress, children };
+            session = { token: randomBytes(32).toString('hex'), policy: new DestinationPolicy(Date.now, event => {
+              diagnostic(event);
+              if (event.event === 'join-advertised') session.serverName = event.name;
+            }), owner: ws, peer: req.socket.remoteAddress, children };
             sessions.set(session.token, session); port = FRIEND_PORT; host = TRUSTED_IP;
           } else {
             session = sessions.get(hello.session);
@@ -103,14 +129,29 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
             session.children.add(ws); port = hello.port; host = hello.ip;
           }
           selected = true; clearTimeout(helloTimeout);
+          destination = { serverIP: host, serverPort: port, serverName: role === 'game' ? session.serverName : undefined };
           // Non-friend destinations must exactly match a consumed upstream grant.
           tcp = dial({ host, port, family: 4 });
           diagnostic({ event: 'tcp-connect', role, ip: host, port });
           connectTimeout = setTimeout(() => fail('TCP connection timeout'), 8000);
           tcp.setNoDelay(true); tcp.setTimeout(role === 'ping' ? 8000 : 120000);
-          inbound = new FrameDecoder(packet => { if (role === 'friend') session.policy.observe(packet); });
+          inbound = new FrameDecoder(packet => {
+            if (role === 'friend') {
+              session.policy.observe(packet);
+              if (packet[0] === 11 && [1, 2].includes(packet[1]) && pendingAccount) {
+                session.account = account = pendingAccount;
+                pendingAccount = undefined;
+                log('account-authenticated');
+              }
+            } else if (role === 'game' && packet[0] === 2 && !joinedAt) {
+              account = pendingAccount || session.account;
+              joinedAt = new Date().toISOString();
+              log('server-joined', { joinedAt });
+            }
+          });
           tcp.on('connect', () => {
             clearTimeout(connectTimeout); ready = true;
+            log('upstream-connected');
             ws.send(JSON.stringify({ type: 'ready', session: role === 'friend' ? session.token : undefined }));
           });
           tcp.on('data', data => {
@@ -153,6 +194,16 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
 if (process.argv[1] && await realpath(process.argv[1]).catch(() => '') === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 8001);
   const host = process.env.HOST || '127.0.0.1';
-  const { server } = createServer({ diagnostic: event => console.log(JSON.stringify({ time: new Date().toISOString(), ...event })) });
+  const logger = createActivityLogger({ enabled: process.env.VERBOSE_LOGGING === 'true', directory: process.env.LOG_DIR || path.join(projectRoot, 'logs') });
+  const { server, wss } = createServer({ activity: event => logger.log(event), trustProxy: process.env.TRUST_PROXY === 'true', diagnostic: event => console.log(JSON.stringify({ time: new Date().toISOString(), ...event })) });
   server.listen(port, host, () => console.log(`WorkingServer: http://${host}:${port} (upstream ${TRUSTED_IP}:${FRIEND_PORT})`));
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    for (const ws of wss.clients) ws.terminate();
+    server.close(async () => { await logger.flush(); process.exit(0); });
+  };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
 }

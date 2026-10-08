@@ -5,12 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Hybrid Animals</title>
     <link rel="stylesheet" href="/style.css">
+    <script src="/site/md5.js" defer></script>
+    <script type="importmap">{"imports":{"fflate":"/site/fflate.js"}}</script>
+    <script type="module" src="/site/saves.js"></script>
   </head>
   <body class="splash">
+    <div class="splash-layout">
+    <aside class="save-controls" aria-labelledby="save-heading">
+
+        <h2 id="save-heading">Your data</h2>
+        <p>Back up all saves, or only your general_ file (login and purchases). Files stay in your browser and are never uploaded.</p>
+        <fieldset class="save-scope">
+          <legend>Data to export</legend>
+          <label><input type="radio" name="save-scope" value="all" checked> All game data</label>
+          <label><input type="radio" name="save-scope" value="general"> Only general_ <span>(login and purchases)</span></label>
+        </fieldset>
+        <div class="save-actions"><button id="export-save" type="button">Export ZIP</button><button id="import-trigger" type="button">Import ZIP</button><input id="import-save" type="file" accept=".zip,application/zip" hidden></div>
+        <p>Close all game tabs before transferring data. Import replaces matching files; general_ imports leave your worlds alone. Keep backups private: they include your login.</p>
+        <p id="save-status" role="status">Checking saved data…</p>
+        <button id="confirm-import" type="button" hidden>Import these files</button>
+        <button id="cancel-import" type="button" hidden>Cancel</button>
+    </aside>
+    <div class="splash-content">
     <main class="splash-main">
       <h1>Hybrid Animals</h1>
       <p>Play in your browser.</p>
       <a class="play-button" href="/play">Play</a>
+
       <p class="splash-notice">We are not affiliated with Abstract Software Inc. All game assets and code belong to &copy; <a href="https://www.abstractsoftwares.com/" target="_blank" rel="noopener noreferrer">Abstract Software Inc.</a></p>
     </main>
     <nav class="splash-links" aria-label="Community and contact">
@@ -18,5 +39,7 @@
         <a href="mailto:segual@segually.dev">segual@segually.dev</a>
         <a href="https://discord.gg/TYEhNVmXhw" target="_blank" rel="noopener noreferrer">Join to mod the game</a>
     </nav>
+    </div>
+    </div>
   </body>
 </html>

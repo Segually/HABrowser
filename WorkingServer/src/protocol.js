@@ -130,7 +130,7 @@ export class DestinationPolicy {
         if (requested.name !== name || requested.expires <= this.now() || !this.publicServers.has(name))
           throw new Error('Join response does not match listed public server request');
       }
-      this.diagnostic({ event: 'join-advertised', ip, port, addressType: type });
+      this.diagnostic({ event: 'join-advertised', name, ip, port, addressType: type });
       // Match Connection.cs: only the literal "ipv6" selects IPv6; other hints
       // use IPv4. The exact announced IP/port checks remain authoritative.
       if (type === 'ipv6') return;

@@ -11,6 +11,8 @@
     "sync-game": "node scripts/sync-game.js"
   },
   "dependencies": {
+    "blueimp-md5": "^2.19.0",
+    "fflate": "^0.8.3",
     "ws": "^8.18.3"
   }
 }
