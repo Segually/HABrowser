@@ -12,7 +12,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const LIMIT = 1024 * 1024;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.data': 'application/octet-stream' };
 
-export function createServer({ publicDir = path.join(projectRoot, 'public'), dial = options => net.createConnection(options) } = {}) {
+export function createServer({ publicDir = path.join(projectRoot, 'public'), dial = options => net.createConnection(options), diagnostic = () => {} } = {}) {
   const sessions = new Map(), peers = new Map();
   const root = path.resolve(publicDir);
   const server = http.createServer(async (req, res) => {
@@ -62,6 +62,7 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
     const helloTimeout = setTimeout(() => fail('Handshake timeout'), 5000);
     let connectTimeout;
     function fail(reason) {
+      diagnostic({ event: 'relay-failed', role, reason });
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'error', message: reason }));
       ws.close(1008, reason); tcp?.destroy();
     }
@@ -84,7 +85,7 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
           let port;
           if (role === 'friend') {
             if (hello.ip !== TRUSTED_IP || hello.port !== FRIEND_PORT) throw new Error('Friend destination denied');
-            session = { token: randomBytes(32).toString('hex'), policy: new DestinationPolicy(), owner: ws, peer: req.socket.remoteAddress, children };
+            session = { token: randomBytes(32).toString('hex'), policy: new DestinationPolicy(Date.now, diagnostic), owner: ws, peer: req.socket.remoteAddress, children };
             sessions.set(session.token, session); port = FRIEND_PORT;
           } else {
             session = sessions.get(hello.session);
@@ -95,6 +96,7 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
           selected = true; clearTimeout(helloTimeout);
           // Never dial a hostname or any client-supplied IP. Only the approved numeric port varies.
           tcp = dial({ host: TRUSTED_IP, port, family: 4 });
+          diagnostic({ event: 'tcp-connect', role, ip: TRUSTED_IP, port });
           connectTimeout = setTimeout(() => fail('TCP connection timeout'), 8000);
           tcp.setNoDelay(true); tcp.setTimeout(role === 'ping' ? 8000 : 120000);
           inbound = new FrameDecoder(packet => { if (role === 'friend') session.policy.observe(packet); });
@@ -111,10 +113,10 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
                 if (ws.bufferedAmount + frame.length > LIMIT) throw new Error('Browser backpressure limit');
                 ws.send(frame, { binary: true });
               }
-            } catch { fail('Invalid upstream protocol or slow browser'); }
+            } catch (error) { diagnostic({ event: 'upstream-rejected', role, reason: error.message }); fail('Invalid upstream protocol or slow browser'); }
           });
           tcp.on('timeout', () => fail('TCP idle timeout'));
-          tcp.on('error', () => fail('Upstream unavailable'));
+          tcp.on('error', error => { diagnostic({ event: 'tcp-error', role, code: error.code }); fail('Upstream unavailable'); });
           tcp.on('close', () => ws.close(1000, 'TCP closed'));
           return;
         }
@@ -142,6 +144,6 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 8001);
   const host = process.env.HOST || '127.0.0.1';
-  const { server } = createServer();
+  const { server } = createServer({ diagnostic: event => console.log(JSON.stringify({ time: new Date().toISOString(), ...event })) });
   server.listen(port, host, () => console.log(`WorkingServer: http://${host}:${port} (upstream ${TRUSTED_IP}:${FRIEND_PORT})`));
 }

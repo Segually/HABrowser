@@ -78,7 +78,7 @@ function dispatchers(reader) {
 }
 
 export class DestinationPolicy {
-  constructor(now = Date.now) { this.now = now; this.grants = new Map(); }
+  constructor(now = Date.now, diagnostic = () => {}) { this.now = now; this.diagnostic = diagnostic; this.grants = new Map(); }
   observe(packet) {
     const reader = new PacketReader(packet);
     const command = reader.byte();
@@ -90,7 +90,10 @@ export class DestinationPolicy {
       reader.byte(); reader.end();
       // A newer join response supersedes every previous game destination.
       for (const key of this.grants.keys()) if (key.startsWith('game:')) this.grants.delete(key);
-      if (type !== 'ipv4') return;
+      this.diagnostic({ event: 'join-advertised', ip, port, addressType: type });
+      // Match Connection.cs: only the literal "ipv6" selects IPv6; other hints
+      // use IPv4. The exact numeric IP/port checks below remain authoritative.
+      if (type === 'ipv6') return;
       entries = [{ ip, port }]; role = 'game';
     } else if (command === 32) {
       reader.byte(); entries = dispatchers(reader); reader.end(); role = 'ping';
@@ -115,6 +118,7 @@ export class DestinationPolicy {
     } else return;
     // Only this fixed IP can ever become eligible, even if upstream advertises another.
     for (const entry of entries) {
+      this.diagnostic({ event: 'destination-advertised', role, ip: entry.ip, port: entry.port, allowed: entry.ip === TRUSTED_IP });
       if (entry.ip !== TRUSTED_IP || !Number.isInteger(entry.port) || entry.port < 1 || entry.port > 32767) continue;
       if (this.grants.size >= 64) this.grants.delete(this.grants.keys().next().value);
       this.grants.set(`${role}:${entry.ip}:${entry.port}`, this.now() + (role === 'game' ? 30000 : 60000));
