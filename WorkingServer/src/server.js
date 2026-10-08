@@ -2,7 +2,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { stat, realpath } from 'node:fs/promises';
+import { stat, realpath, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -24,7 +24,13 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/api/relay') { res.writeHead(426); res.end('WebSocket required'); return; }
-      const name = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
+      if (url.pathname === '/' || url.pathname === '/index.html') {
+        const splash = await readFile(path.join(projectRoot, 'views/splash.html'));
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': splash.length });
+        res.end(req.method === 'HEAD' ? undefined : splash);
+        return;
+      }
+      const name = decodeURIComponent(url.pathname === '/play' ? '/index.html' : url.pathname);
       const file = await realpath(path.resolve(root, '.' + name));
       const relative = path.relative(root, file);
       if (relative.startsWith('..') || path.isAbsolute(relative) || name.split('/').some(part => part.startsWith('.'))) throw new Error('Forbidden path');

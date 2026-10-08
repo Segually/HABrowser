@@ -23,3 +23,95 @@ canvas {
   font: 16px sans-serif;
   pointer-events: none;
 }
+
+.splash-page {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  background: #000;
+}
+
+body.splash {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 100svh;
+  padding: 0 24px;
+  flex-direction: column;
+  overflow: visible;
+  background: #000;
+  color: #ededed;
+  font-family: system-ui, sans-serif;
+}
+
+.splash-main {
+  width: 100%;
+  max-width: 520px;
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.splash h1 {
+  margin: 0;
+  font-size: clamp(32px, 6vw, 48px);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.splash p {
+  margin: 16px 0 32px;
+  color: #a5a5a5;
+  font-size: 16px;
+}
+
+.play-button {
+  display: inline-block;
+  padding: 12px 40px;
+  border: 1px solid #ededed;
+  border-radius: 4px;
+  background: #ededed;
+  color: #171717;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.play-button:hover {
+  background: #d4d4d4;
+  border-color: #d4d4d4;
+}
+
+.splash-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px 24px;
+  padding: 24px 0;
+  font-size: 14px;
+}
+
+.splash p.splash-notice {
+  margin: 32px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.splash-links a,
+.splash-notice a {
+  color: #669dff;
+  text-underline-offset: 4px;
+}
+
+.splash-links a:hover,
+.splash-notice a:hover {
+  color: #96bbff;
+}
+
+.splash a:focus-visible {
+  outline: 2px solid #ededed;
+  outline-offset: 5px;
+}
