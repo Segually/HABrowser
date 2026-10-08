@@ -48,7 +48,7 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
       const origin = new URL(req.headers.origin);
       const key = req.socket.remoteAddress;
       if (url.pathname !== '/api/relay' || url.search || origin.host !== req.headers.host ||
-          !['http:', 'https:'].includes(origin.protocol) || wss.clients.size >= 256 || (peers.get(key) || 0) >= 32) throw new Error('Denied');
+          !['http:', 'https:'].includes(origin.protocol) || wss.clients.size >= 256 || (peers.get(key) || 0) >= 128) throw new Error('Denied');
       wss.handleUpgrade(req, socket, head, ws => {
         peers.set(key, (peers.get(key) || 0) + 1);
         ws.once('close', () => { const n = peers.get(key) - 1; if (n) peers.set(key, n); else peers.delete(key); });
@@ -144,7 +144,7 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
   return { server, wss };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && await realpath(process.argv[1]).catch(() => '') === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 8001);
   const host = process.env.HOST || '127.0.0.1';
   const { server } = createServer({ diagnostic: event => console.log(JSON.stringify({ time: new Date().toISOString(), ...event })) });
