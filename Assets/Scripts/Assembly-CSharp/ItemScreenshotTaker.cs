@@ -13,10 +13,25 @@ public class ItemScreenshotTaker : MonoBehaviour, OrderedStart
 	public GameObject item_screenshots_light;
 
 	public Dictionary<InventoryItem, Texture2D> cached_model3d_graphics = new Dictionary<InventoryItem, Texture2D>();
+	private readonly Dictionary<Texture2D, float> iconLastUsed = new Dictionary<Texture2D, float>();
+	private readonly HashSet<ItemSprite> iconConsumers = new HashSet<ItemSprite>();
 
 	public List<screenshot_pair> screenshot_queue = new List<screenshot_pair>();
 
 	public Color item_screenshots_ambientCol;
+
+	public void RegisterIconConsumer(ItemSprite sprite)
+	{
+		iconConsumers.Add(sprite);
+	}
+
+	private static void DestroyIcon(Texture2D texture)
+	{
+#if UNITY_EDITOR
+		if (!Application.isPlaying) { DestroyImmediate(texture); return; }
+#endif
+		Destroy(texture);
+	}
 
 	public void Start_0()
 	{
@@ -25,7 +40,63 @@ public class ItemScreenshotTaker : MonoBehaviour, OrderedStart
 
 	public void Start_1()
 	{
+		// Captures are explicitly rendered; this camera must not render every frame.
+		item_screenshots_cam.enabled = false;
 		StartCoroutine(ProcessScreenshots());
+		StartCoroutine(ExpireIcons());
+	}
+
+	private IEnumerator ExpireIcons()
+	{
+		var interval = new WaitForSecondsRealtime(10f);
+		while (true)
+		{
+			yield return interval;
+			CleanupIcons(Time.realtimeSinceStartup);
+		}
+	}
+
+	public void CleanupIcons(float now)
+	{
+		iconConsumers.RemoveWhere(sprite => sprite == null);
+		var visible = new HashSet<Texture2D>();
+		foreach (var sprite in iconConsumers)
+		{
+			if (sprite.model3d_generated_graphic_ == null) continue;
+			var image = sprite.model3d_generated_graphic_.GetComponent<RawImage>();
+			var texture = image.texture as Texture2D;
+			if (texture != null && image.isActiveAndEnabled)
+			{
+				visible.Add(texture);
+				if (iconLastUsed.ContainsKey(texture)) iconLastUsed[texture] = now;
+			}
+		}
+		var expired = new HashSet<Texture2D>();
+		foreach (var entry in iconLastUsed)
+			if (!visible.Contains(entry.Key) && now - entry.Value >= 60f) expired.Add(entry.Key);
+		foreach (var sprite in iconConsumers)
+		{
+			if (sprite.model3d_generated_graphic_ == null) continue;
+			var image = sprite.model3d_generated_graphic_.GetComponent<RawImage>();
+			if (expired.Contains(image.texture as Texture2D)) image.texture = null;
+		}
+		var keys = new List<InventoryItem>();
+		foreach (var entry in cached_model3d_graphics)
+			if (expired.Contains(entry.Value)) keys.Add(entry.Key);
+		foreach (var key in keys) cached_model3d_graphics.Remove(key);
+		foreach (var texture in expired)
+		{
+			iconLastUsed.Remove(texture);
+			DestroyIcon(texture);
+		}
+	}
+
+	private void OnDestroy()
+	{
+		foreach (var texture in iconLastUsed.Keys) if (texture != null) DestroyIcon(texture);
+		iconLastUsed.Clear();
+		cached_model3d_graphics.Clear();
+		iconConsumers.Clear();
 	}
 
 	private IEnumerator ProcessScreenshots()
@@ -144,6 +215,8 @@ public class ItemScreenshotTaker : MonoBehaviour, OrderedStart
 
 	public void QueueForScreenshot(InventoryItem item_unmodified, GameObject model3d_generated_graphic_, ItemSprite original_sprite)
 	{
+		RegisterIconConsumer(original_sprite);
+		original_sprite.RememberGeneratedIcon(item_unmodified);
 		InventoryItem inventoryItem = InventoryItem.SetDisplayDefaults(item_unmodified);
 		if (!cached_model3d_graphics.ContainsKey(item_unmodified))
 		{
@@ -169,6 +242,7 @@ public class ItemScreenshotTaker : MonoBehaviour, OrderedStart
 		}
 		else
 		{
+			iconLastUsed[cached_model3d_graphics[item_unmodified]] = Time.realtimeSinceStartup;
 			original_sprite.Model3DScreenshotComplete(cached_model3d_graphics[item_unmodified]);
 		}
 	}
@@ -448,13 +522,20 @@ public class ItemScreenshotTaker : MonoBehaviour, OrderedStart
 
 	public void AddCachedGraphic(InventoryItem item, Texture2D tex)
 	{
-		int num = ((GraphicsControl.Instance.GraphicsLevel() > 4) ? 30 : 25);
-		if (cached_model3d_graphics.Count > num)
+		iconLastUsed[tex] = Time.realtimeSinceStartup;
+		if (cached_model3d_graphics.Count >= 24)
 		{
-			List<InventoryItem> list = new List<InventoryItem>(cached_model3d_graphics.Keys);
-			cached_model3d_graphics.Remove(list[UnityEngine.Random.Range(0, list.Count)]);
+			InventoryItem oldest = default(InventoryItem);
+			float oldestTime = float.MaxValue;
+			foreach (var entry in cached_model3d_graphics)
+			{
+				float used = iconLastUsed.TryGetValue(entry.Value, out var time) ? time : 0f;
+				if (used < oldestTime) { oldest = entry.Key; oldestTime = used; }
+			}
+			// Texture ownership stays here until consumers stop displaying it.
+			cached_model3d_graphics.Remove(oldest);
 		}
-		cached_model3d_graphics.Add(item, tex);
+		cached_model3d_graphics[item] = tex;
 	}
 
 	private void DetectParticles(screenshot_pair pair)

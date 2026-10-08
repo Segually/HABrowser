@@ -241,16 +241,23 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 
 	private IEnumerator DeloadResourcesPeriodically()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		var interval = new WaitForSecondsRealtime(15f);
+		var stagger = new WaitForSecondsRealtime(1f);
+#else
+		var interval = new WaitForSecondsRealtime(60f);
+		var stagger = new WaitForSecondsRealtime(5f);
+#endif
 		while (true)
 		{
-			yield return new WaitForSeconds(60f);
-			yield return new WaitForSeconds(5f);
+			yield return interval;
+			yield return stagger;
 			GenericDeloadUnused(sprites_loaded_or_midLoad, images_potentially_using_sprites);
-			yield return new WaitForSeconds(5f);
+			yield return stagger;
 			GenericDeloadUnused(sfx_loaded_or_midLoad, audiosources_potentially_using_sfx);
-			yield return new WaitForSeconds(5f);
+			yield return stagger;
 			GenericDeloadUnused(textures_loaded_or_midLoad, renderers_potentially_using_textures);
-			yield return new WaitForSeconds(5f);
+			yield return stagger;
 			GenericDeloadUnused(prefabs_loaded_or_midLoad, instances_of_prefabs);
 		}
 	}
@@ -1088,7 +1095,7 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 		List<ConsumerType> list = new List<ConsumerType>();
 		foreach (KeyValuePair<ConsumerType, string> item in consumer_list)
 		{
-			if (item.Key.ToString() == "null")
+			if (item.Key is UnityEngine.Object obj && obj == null)
 			{
 				list.Add(item.Key);
 			}
@@ -1098,6 +1105,7 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 			consumer_list.Remove(item2);
 		}
 		List<string> list2 = new List<string>();
+		HashSet<string> usedPaths = new HashSet<string>(consumer_list.Values);
 		foreach (KeyValuePair<string, AsyncOperationHandle<AssetType>> item3 in loaded_or_midLoad_list)
 		{
 			AsyncOperationHandle asyncOperationHandle = item3.Value;
@@ -1105,16 +1113,7 @@ public class ResourceControl : MonoBehaviour, OrderedStart
 			{
 				continue;
 			}
-			bool flag = false;
-			foreach (KeyValuePair<ConsumerType, string> item4 in consumer_list)
-			{
-				if (item4.Value == item3.Key)
-				{
-					flag = true;
-					break;
-				}
-			}
-			if (!flag)
+			if (!usedPaths.Contains(item3.Key))
 			{
 				list2.Add(item3.Key);
 			}

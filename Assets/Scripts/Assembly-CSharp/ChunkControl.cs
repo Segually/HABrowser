@@ -5,6 +5,10 @@ using UnityEngine;
 
 public class ChunkControl : MonoBehaviour, OrderedStart
 {
+#if UNITY_WEBGL && !UNITY_EDITOR
+	private readonly Plane[] browserViewPlanes = new Plane[6];
+	private bool browserViewReady;
+#endif
 	[Serializable]
 	public struct cave_define
 	{
@@ -793,6 +797,9 @@ public class ChunkControl : MonoBehaviour, OrderedStart
 				GameplayGUIControl.Instance.UpdateDistanceDisplay();
 				UpdateTerrain(false);
 			}
+#if UNITY_WEBGL && !UNITY_EDITOR
+			else UpdateTerrain(false); // Visibility changes within a chunk and when zooming.
+#endif
 		}
 	}
 
@@ -936,6 +943,12 @@ public class ChunkControl : MonoBehaviour, OrderedStart
 
 	private void TryAddToSurroundingList(string zone, int X, int Z, ref Dictionary<string, ChunkCoordinates> chunks_surrounding_me_now)
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		// Keep the central cross for movement. Load diagonal terrain only when visible.
+		if (browserViewReady && X != player_chunk_X && Z != player_chunk_Z &&
+			!GeometryUtility.TestPlanesAABB(browserViewPlanes,
+				new Bounds(new Vector3(X * 10f + 5f, 2f, Z * 10f + 5f), new Vector3(14f, 12f, 14f)))) return;
+#endif
 		if (DevBuildControl.Instance.debug_bandit_camp_data == null || (X >= 0 && Z >= 0 && X < DevBuildControl.Instance.debug_bandit_camp_W && Z < DevBuildControl.Instance.debug_bandit_camp_H) || !(zone == "overworld"))
 		{
 			chunks_surrounding_me_now.Add(GetChunkString(zone, X, Z), new ChunkCoordinates(zone, X, Z));
@@ -944,6 +957,11 @@ public class ChunkControl : MonoBehaviour, OrderedStart
 
 	public void UpdateTerrain(bool calc_chunk)
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		var view = GameController.Instance.mainCamera != null ? GameController.Instance.mainCamera.GetComponent<Camera>() : null;
+		browserViewReady = view != null;
+		if (browserViewReady) GeometryUtility.CalculateFrustumPlanes(view, browserViewPlanes);
+#endif
 		if (calc_chunk)
 		{
 			CalcPlayerChunk();

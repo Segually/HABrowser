@@ -31,7 +31,7 @@ public class ScreenshotWithEffects : MonoBehaviour, OrderedStart
 	{
 		shared_base_rt = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
 		shared_particles_rt = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
-		shared_final_rt = new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32);
+		shared_final_rt = new RenderTexture(128, 128, 0, RenderTextureFormat.ARGB32);
 	}
 
 	private void ClearRenderTexture(RenderTexture rt)
@@ -96,15 +96,22 @@ public class ScreenshotWithEffects : MonoBehaviour, OrderedStart
 		RenderTexture active = RenderTexture.active;
 		RenderTexture.active = shared_final_rt;
 		texture2D.ReadPixels(new Rect(0f, 0f, shared_final_rt.width, shared_final_rt.height), 0, 0);
-		texture2D.Apply();
+		texture2D.Apply(false, true);
 		RenderTexture.active = active;
 		return texture2D;
 	}
 
 	private void OnDestroy()
 	{
-		shared_base_rt.Release();
-		shared_particles_rt.Release();
-		shared_final_rt.Release();
+		ReleaseTexture(shared_base_rt);
+		ReleaseTexture(shared_particles_rt);
+		ReleaseTexture(shared_final_rt);
+	}
+
+	private static void ReleaseTexture(RenderTexture texture)
+	{
+		if (texture == null) return;
+		texture.Release();
+		Destroy(texture);
 	}
 }

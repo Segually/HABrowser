@@ -48,6 +48,22 @@ public class ItemSprite : MonoBehaviour
 	private Texture2D custom_graphic_texture;
 
 	private bool raycast;
+	private InventoryItem generatedIconItem;
+	private bool hasGeneratedIcon;
+
+	public void RememberGeneratedIcon(InventoryItem item)
+	{
+		generatedIconItem = item;
+		hasGeneratedIcon = true;
+	}
+
+	private void OnEnable()
+	{
+		if (!hasGeneratedIcon || model3d_generated_graphic_ == null || ItemScreenshotTaker.Instance == null) return;
+		var image = model3d_generated_graphic_.GetComponent<RawImage>();
+		if (image.enabled && image.texture == null)
+			ItemScreenshotTaker.Instance.QueueForScreenshot(generatedIconItem, model3d_generated_graphic_, this);
+	}
 
 	public void RedrawBasic(InventoryItem item, int count)
 	{
@@ -188,6 +204,7 @@ public class ItemSprite : MonoBehaviour
 
 	private void Redraw(InventoryItem item, int count, List<draw_param> parameters, int slot_id = -1)
 	{
+		hasGeneratedIcon = false;
 		ProcessPreDraw();
 		ProcessBackground(item, count, parameters, slot_id);
 		ProcessItemGraphic(item, count, parameters, slot_id);

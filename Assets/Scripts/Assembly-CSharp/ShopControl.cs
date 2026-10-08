@@ -608,7 +608,7 @@ public class ShopControl : MonoBehaviour, OrderedStart
 			}
 			else OnShopModelLoaded(new GameObject("Error"), holder);
 			attempt_buy_name = purchase_structs_ordering[index];
-			ShowShopPopup(TranslationControl.Instance.TranslateGeneral("Pay with cash", "Market"), button_color_t.price_white, TranslationControl.Instance.TranslateGeneral("Use gems", "Market"), button_color_t.gems_cyan, true, "<color=#eeeeee>" + TranslationControl.Instance.TranslateGeneral("How would you like to get", "Market") + "</color>\n" + TranslationControl.Instance.TranslateGeneral(name, "Market"), color, button_BG_generic, Color.white, ring_sprite, new Color(1f, 1f, 1f, 0.6f), color, popup_context.payment_options);
+			ShowShopPopup(BrowserPurchaseLabel(), button_color_t.price_white, TranslationControl.Instance.TranslateGeneral("Use gems", "Market"), button_color_t.gems_cyan, true, "<color=#eeeeee>" + TranslationControl.Instance.TranslateGeneral("How would you like to get", "Market") + "</color>\n" + TranslationControl.Instance.TranslateGeneral(name, "Market"), color, button_BG_generic, Color.white, ring_sprite, new Color(1f, 1f, 1f, 0.6f), color, popup_context.payment_options);
 			DestroyShopModels();
 		}
 		else if (type == "subscription")
@@ -619,6 +619,15 @@ public class ShopControl : MonoBehaviour, OrderedStart
 				PopupControl.Instance.on_yes_pressed = delegate { Application.OpenURL("https://support.apple.com/en-ca/HT202039"); };
 			PopupControl.Instance.ShowYesNo("If you would like to remove a subscription,\nyou can do so by pressing 'Manage' below.", "MANAGE", "Cancel", PopupControl.context.yesno_ACTION);
 		}
+	}
+
+	private string BrowserPurchaseLabel()
+	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		return "Get for free";
+#else
+		return TranslationControl.Instance.TranslateGeneral("Pay with cash", "Market");
+#endif
 	}
 
 	private void BuyWithCash(string iap_key)
@@ -1140,9 +1149,18 @@ public class ShopControl : MonoBehaviour, OrderedStart
 		if (!on_pressed_buy) return;
 		on_pressed_buy = false;
 		popup_context context = is_shop_window_open ? popup_context.store_purchase_succeed : popup_context.revive_purchase_succeed;
-		ShowShopPopup("OKAY", button_color_t.okay_blue, "", button_color_t.none, false, TranslationControl.Instance.TranslateGeneral("THANK YOU for supporting us!", "Market") + "\n<color=#eeeeee>" + TranslationControl.Instance.TranslateGeneral("Your generosity helps us improve the game!", "Market") + "</color>", new Color(0.8666667f, 0.9411765f, 0.16078432f, 1f), purchase_happy, Color.white, null, Color.white, new Color(0.5294118f, 0.50980395f, 0.29803923f, 1f), context);
+		ShowShopPopup("OKAY", button_color_t.okay_blue, "", button_color_t.none, false, PurchaseSuccessMessage(), new Color(0.8666667f, 0.9411765f, 0.16078432f, 1f), purchase_happy, Color.white, null, Color.white, new Color(0.5294118f, 0.50980395f, 0.29803923f, 1f), context);
 		if (is_shop_window_open) DestroyShopModels();
 		GameController.Instance.sound_levelButton();
+	}
+
+	private string PurchaseSuccessMessage()
+	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		return "Item added!\n<color=#eeeeee>No payment was required.</color>";
+#else
+		return TranslationControl.Instance.TranslateGeneral("THANK YOU for supporting us!", "Market") + "\n<color=#eeeeee>" + TranslationControl.Instance.TranslateGeneral("Your generosity helps us improve the game!", "Market") + "</color>";
+#endif
 	}
 
 	public void OnTransactionFailed()

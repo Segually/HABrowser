@@ -41,8 +41,7 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 		{
 			DontDestroyOnLoad(gameObject);
 #if UNITY_WEBGL && !UNITY_EDITOR
-			// Apple/Google native stores are not available in a browser player.
-			initialize_state = intialize_state_t.failed;
+			InitializePurchasing();
 #else
 			StartCoroutine(InitializeUnityGamingServicesThenIAP());
 #endif
@@ -65,7 +64,8 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 	public void InitializePurchasing()
 	{
 #if UNITY_WEBGL && !UNITY_EDITOR
-		initialize_state = intialize_state_t.failed;
+		initialize_state = intialize_state_t.unknown;
+		StartCoroutine(InitializeBrowserStore());
 		return;
 #else
 		if (IsInitialized()) return;
@@ -90,17 +90,59 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 
 	private bool IsInitialized()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		return initialize_state == intialize_state_t.succeed;
+#else
 		return m_StoreController != null && m_StoreExtensionProvider != null;
+#endif
 	}
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+	private IEnumerator InitializeBrowserStore()
+	{
+		yield return null;
+		initialize_state = intialize_state_t.succeed;
+		if (GetCurrSceneName() == "Game") SignalToGame();
+	}
+
+	private void PopulateBrowserPrices()
+	{
+		foreach (var name in ShopControl.Instance.purchase_structs_ordering)
+		{
+			var key = ShopControl.Instance.GetPurchaseableKey(name);
+			var alt = ShopControl.Instance.GetPurchaseableAltKey(name);
+			if (!Startup.StringNullOrWhitespace(key)) price_infos[key] = "Free";
+			if (!Startup.StringNullOrWhitespace(alt)) price_infos[alt] = "Free";
+		}
+	}
+
+	private IEnumerator CompleteBrowserPurchase(string productId)
+	{
+		// Wait until the shop has finished setting its purchase-in-progress state.
+		yield return null;
+		if (ShopControl.Instance == null) yield break;
+		PopulateBrowserPrices();
+		if (IsInitialized() && price_infos.ContainsKey(productId))
+			ShopControl.Instance.OnTransactionSucceed(productId);
+		else ShopControl.Instance.OnTransactionFailed();
+	}
+#endif
 
 	public void SignalToGame()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (ShopControl.Instance == null) return;
+		PopulateBrowserPrices();
+#endif
 		if (initialize_state == intialize_state_t.succeed) ShopControl.Instance.ShopFinishedLoading();
 		else if (initialize_state == intialize_state_t.failed) ShopControl.Instance.ShopFailedLoading();
 	}
 
 	public void BuyProductID(string productId)
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		StartCoroutine(CompleteBrowserPurchase(productId));
+#else
 		if (IsInitialized())
 		{
 			Product product = m_StoreController.products.WithID(productId);
@@ -111,6 +153,7 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 			}
 		}
 		ShopControl.Instance.OnTransactionFailed();
+#endif
 	}
 
 	public void RestoreSubscription()
@@ -132,6 +175,10 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 
 	public void TryRestorePurchases()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		PopupControl.Instance.ShowMessage("Restoration complete!", PopupControl.context.message);
+		if (ShopControl.Instance != null) ShopControl.Instance.RedrawAll();
+#else
 		m_StoreExtensionProvider.GetExtension<IAppleExtensions>().RestoreTransactions(delegate(bool success, string message)
 		{
 			if (success)
@@ -141,6 +188,7 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 			}
 			else PopupControl.Instance.ShowMessage("ERROR - Restoration could not complete", PopupControl.context.message);
 		});
+#endif
 	}
 
 	private void OnDeferred(Product item)
@@ -208,6 +256,7 @@ public class InAppPurchaseControl : MonoBehaviour, IStoreListener, OrderedStart
 
 	public void OnInitializeFailed(InitializationFailureReason error, string message)
 	{
-		throw new NotImplementedException();
+		Debug.LogError("Store initialization failed: " + error + " " + message);
+		OnInitializeFailed(error);
 	}
 }

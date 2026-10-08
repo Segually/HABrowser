@@ -606,7 +606,11 @@ public class MenuController : MonoBehaviour, OrderedStart
 		}
 		if (PlayerPrefs.GetInt("GraphicsLevel") == 0)
 		{
+#if UNITY_WEBGL && !UNITY_EDITOR
+			PlayerPrefs.SetInt("GraphicsLevel", 2);
+#else
 			PlayerPrefs.SetInt("GraphicsLevel", 4);
+#endif
 		}
 	}
 

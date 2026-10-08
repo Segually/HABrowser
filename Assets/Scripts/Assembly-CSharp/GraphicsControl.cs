@@ -13,11 +13,23 @@ public class GraphicsControl : MonoBehaviour, OrderedStart
 
 	public void Start_1()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		QualitySettings.shadows = ShadowQuality.Disable;
+		QualitySettings.antiAliasing = 0;
+		QualitySettings.anisotropicFiltering = AnisotropicFiltering.Disable;
+		QualitySettings.pixelLightCount = 0;
+		QualitySettings.vSyncCount = 0;
+		Application.targetFrameRate = 60;
+#endif
 	}
 
 	public int GraphicsLevel()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		return Mathf.Clamp(PlayerPrefs.GetInt("GraphicsLevel", 2), 1, 3);
+#else
 		return PlayerPrefs.GetInt("GraphicsLevel");
+#endif
 	}
 
 	public int SpecialAnimationChoppiness()
