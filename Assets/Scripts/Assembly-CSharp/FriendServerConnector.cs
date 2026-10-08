@@ -37,31 +37,7 @@ public class FriendServerConnector : MonoBehaviour, OrderedStart
 	{
 		if (friend_server_connection == null)
 		{
-			string globalString = PlayerData.Instance.GetGlobalString("connect_to");
-			if (!Startup.StringNullOrEmpty(globalString) && globalString == "custom")
-			{
-				string globalString2 = PlayerData.Instance.GetGlobalString("custom_ip");
-				string globalString3 = PlayerData.Instance.GetGlobalString("custom_port");
-				if (Startup.StringNullOrEmpty(globalString2))
-				{
-					Debug.Log("<color=#ff0000>NO CUSTOM_IP SET</color>");
-					friend_server_connection = new Connection("ipv4", "104.45.198.157", 7002, Connection.parent_t.FriendServerBackend, 25);
-				}
-				else if (Startup.StringNullOrEmpty(globalString3))
-				{
-					Debug.Log("<color=#ff0000>NO CUSTOM_PORT SET</color>");
-					friend_server_connection = new Connection("ipv4", "104.45.198.157", 7002, Connection.parent_t.FriendServerBackend, 25);
-				}
-				else
-				{
-					int port = int.Parse(globalString3);
-					friend_server_connection = new Connection("ipv4", globalString2, port, Connection.parent_t.FriendServerBackend, 25);
-				}
-			}
-			else
-			{
-				friend_server_connection = new Connection("ipv4", "104.45.198.157", 7002, Connection.parent_t.FriendServerBackend, 25);
-			}
+			friend_server_connection = new Connection("ipv4", "45.8.201.48", 7002, Connection.parent_t.FriendServerBackend, 25);
 		}
 		if (!Startup.StringNullOrEmpty(PlayerData.Instance.GetGlobalString("username_lower")) && PlayerData.Instance.GetGlobalShort("has_friends") != 0 && PlayerData.Instance.GetGlobalShort("n_wasted_autologins") < 10)
 		{

@@ -1,0 +1,16 @@
+{
+  "name": "hybrid-animals-working-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "sync-game": "node scripts/sync-game.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

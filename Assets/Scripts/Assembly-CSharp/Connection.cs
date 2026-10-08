@@ -4,9 +4,21 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 public class Connection
 {
+#if UNITY_WEBGL && !UNITY_EDITOR
+	[DllImport("__Internal")] private static extern int HA_RelayOpen(int role, string address, int targetPort);
+	[DllImport("__Internal")] private static extern int HA_RelayState(int handle);
+	[DllImport("__Internal")] private static extern int HA_RelayReceiveSize(int handle);
+	[DllImport("__Internal")] private static extern int HA_RelayReceive(int handle, byte[] bytes, int length);
+	[DllImport("__Internal")] private static extern int HA_RelaySend(int handle, byte[] bytes, int length);
+	[DllImport("__Internal")] private static extern void HA_RelayClose(int handle);
+	private int relayHandle;
+#endif
 	public enum parent_t
 	{
 		FriendServerBackend = 0,
@@ -115,6 +127,10 @@ public class Connection
 
 	private void CloseSocket()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (relayHandle != 0) HA_RelayClose(relayHandle);
+		relayHandle = 0;
+#endif
 		socket?.Close();
 		status = connection_status.not_connected;
 		socket = null;
@@ -140,6 +156,14 @@ public class Connection
 
 	public connection_status GetStatus()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (status == connection_status.connected && HA_RelayState(relayHandle) != 2)
+		{
+			CloseSocket();
+			async_flag = flag.disconnected;
+		}
+		return status;
+#else
 		if (status == connection_status.connected)
 		{
 			if (socket != null && socket.Connected)
@@ -150,6 +174,7 @@ public class Connection
 			async_flag = flag.disconnected;
 		}
 		return status;
+#endif
 	}
 
 	public void TryConnect(MonoBehaviour caller)
@@ -158,6 +183,7 @@ public class Connection
 		{
 			return;
 		}
+		if (GetStatus() == connection_status.connected) return;
 		if (status == connection_status.connected && socket != null)
 		{
 			if (socket.Connected)
@@ -176,12 +202,22 @@ public class Connection
 	private IEnumerator ConnectCoroutine()
 	{
 #if UNITY_WEBGL && !UNITY_EDITOR
-		// Browsers need a WebSocket transport/relay to talk to the TCP servers.
-		// Use the existing failure flow instead of invoking unsupported sockets.
-		status = connection_status.not_connected;
-		async_flag = flag.connect_failed;
-		Debug.LogWarning("Multiplayer TCP connections are unavailable in this WebGL build.");
-		yield break;
+		relayHandle = HA_RelayOpen((int)parent, ip, port);
+		int attempt = relayHandle;
+		float deadline = Time.realtimeSinceStartup + 10f;
+		while (relayHandle != 0 && HA_RelayState(relayHandle) == 1 && Time.realtimeSinceStartup < deadline)
+			yield return null;
+		if (relayHandle != attempt) yield break;
+		if (relayHandle != 0 && HA_RelayState(relayHandle) == 2)
+		{
+			status = connection_status.connected;
+			async_flag = flag.connect_succeeded;
+		}
+		else
+		{
+			CloseSocket();
+			async_flag = flag.connect_failed;
+		}
 #else
 		yield return new WaitForSeconds(0.25f);
 		socket = new Socket(ip_type == "ipv6" ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -216,6 +252,9 @@ public class Connection
 
 	public void FixedUpdate()
 	{
+#if UNITY_WEBGL && !UNITY_EDITOR
+		if (GetStatus() == connection_status.connected) ReadWebGL();
+#endif
 		if (curr_skip == 0)
 		{
 			switch (async_flag)
@@ -265,6 +304,47 @@ public class Connection
 			ProcessSendQueues();
 		}
 	}
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+	private void ReadWebGL()
+	{
+		// Reassemble the original TCP frames independently of WebSocket message boundaries.
+		for (int message = 0; message < 32; message++)
+		{
+			int length = HA_RelayReceiveSize(relayHandle);
+			if (length == 0) return;
+			if (length < 0 || length > 65536) { FailWebGL(); return; }
+			byte[] bytes = new byte[length];
+			if (HA_RelayReceive(relayHandle, bytes, length) != length) { FailWebGL(); return; }
+			int offset = 0;
+			while (offset < length)
+			{
+				int target = receive_packet_len == -1 ? 2 : receive_packet_len;
+				int copy = Math.Min(target - receive_buffer_iterator, length - offset);
+				Array.Copy(bytes, offset, receive_buffer, receive_buffer_iterator, copy);
+				offset += copy; receive_buffer_iterator += copy;
+				if (receive_buffer_iterator != target) continue;
+				if (receive_packet_len == -1)
+				{
+					receive_packet_len = BitConverter.ToInt16(receive_buffer, 0) - 2;
+					if (receive_packet_len < 8 || receive_packet_len > buffSize - 2) { FailWebGL(); return; }
+				}
+				else
+				{
+					ProcessReceive(null);
+					receive_packet_len = -1;
+				}
+				receive_buffer_iterator = 0;
+			}
+		}
+	}
+
+	private void FailWebGL()
+	{
+		CloseSocket();
+		async_flag = flag.disconnected;
+	}
+#endif
 
 	private void FixedUpdateReceive()
 	{
@@ -400,7 +480,13 @@ public class Connection
 		send_buffer = new byte[curr_i];
 		Array.Copy(to_send, send_buffer, curr_i);
 		send_buffer_iterator = 0;
+#if UNITY_WEBGL && !UNITY_EDITOR
+		// WebSocket.send copies this complete frame; keep the existing byte budget.
+		if (HA_RelaySend(relayHandle, send_buffer, send_buffer.Length) != send_buffer.Length) FailWebGL();
+		else OnSendComplete2(send_buffer.Length);
+#else
 		socket.BeginSend(send_buffer, 0, send_buffer.Length, SocketFlags.None, OnSendComplete, null);
+#endif
 	}
 
 	public void Send(Packet outgoing, priority send_priority = priority.DEFAULT)
