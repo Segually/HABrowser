@@ -680,7 +680,11 @@ public class BreedControl : MonoBehaviour, OrderedStart
 		{
 			if (!Application.isEditor)
 			{
+				#if UNITY_WEBGL && !UNITY_EDITOR
+				WebGLTextInput.Open("", "Companion name", CompanionController.Instance.RenameCompanionOnHatch);
+				#else
 				keyboard = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default);
+				#endif
 			}
 			return;
 		}

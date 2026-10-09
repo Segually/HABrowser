@@ -114,7 +114,11 @@ public class PopupControl : MonoBehaviour, OrderedStart
 		SetButtonWasPressed();
 		if (message_Text.text == "<color=#a5a5a5>[Click to add text]</color>" && !Application.isEditor)
 		{
+			#if UNITY_WEBGL && !UNITY_EDITOR
+			WebGLTextInput.Open("", "Sign text", OnFinishedEditSign);
+			#else
 			keyboard = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.Default);
+			#endif
 		}
 	}
 
