@@ -11,12 +11,23 @@ import { clientIP, createActivityLogger } from './logging.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LIMIT = 1024 * 1024;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.data': 'application/octet-stream' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.js': 'application/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.data': 'application/octet-stream' };
 const siteFiles = {
+  '/sitemap.xml': 'views/sitemap.xml',
+  '/robots.txt': 'views/robots.txt',
   '/site/saves.js': 'client/saves.js',
   '/site/save-core.js': 'client/save-core.js',
   '/site/fflate.js': 'node_modules/fflate/esm/browser.js',
   '/site/md5.js': 'node_modules/blueimp-md5/js/md5.min.js'
+};
+const pages = {
+  '/': 'splash.html',
+  '/index.html': 'splash.html',
+  '/terms': 'terms.html',
+  '/privacy': 'privacy.html',
+  '/multiplayer': 'multiplayer.html',
+  '/getting-started': 'getting-started.html',
+  '/survival': 'survival.html'
 };
 
 export function createServer({ publicDir = path.join(projectRoot, 'public'), dial = options => net.createConnection(options), diagnostic = () => {}, activity = () => {}, trustProxy = false } = {}) {
@@ -31,8 +42,8 @@ export function createServer({ publicDir = path.join(projectRoot, 'public'), dia
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/api/relay') { res.writeHead(426); res.end('WebSocket required'); return; }
-      if (url.pathname === '/' || url.pathname === '/index.html') {
-        const splash = await readFile(path.join(projectRoot, 'views/splash.html'));
+      if (pages[url.pathname] && Object.hasOwn(pages, url.pathname)) {
+        const splash = await readFile(path.join(projectRoot, 'views', pages[url.pathname]));
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': splash.length });
         res.end(req.method === 'HEAD' ? undefined : splash);
         return;

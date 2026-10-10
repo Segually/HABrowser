@@ -2,6 +2,8 @@
 
 HABrowser is a fork of [HADecompiled](https://github.com/Segually/HADecompiled) to make Hybrid Animals run in the browser.
 
+[Play Hybrid Animals free in your browser](https://ha.segually.dev/) — explore, craft, and join community multiplayer with no app installation required.
+
 ## Browser features
 
 - WebGL compatibility fixes for loading assets and starting the game.
